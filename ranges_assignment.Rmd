@@ -1,0 +1,73 @@
+---
+title: "ranges_assignment"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+lecture slides #132-139, where you have to do 2 things: 
+1. make a R markdown file for the workflow that replicates these slides. 
+2. make a new file with a new "variants" column appended to it.
+
+```{r setup, include=FALSE}
+source("http://bioconductor.org/biocLite.R")
+biocLite()
+library(GenomicRanges)
+library(BiocInstaller)
+biocLite("GenomicFeatures")
+
+library(rtracklayer)
+```
+This downloads the annotations of the mouse reference genome mm10, and puts in a transcripts database txdb.
+```{r}
+biocLite("TxDb.Mmusculus.UCSC.mm10.ensGene")
+library(TxDb.Mmusculus.UCSC.mm10.ensGene)
+txdb <- TxDb.Mmusculus.UCSC.mm10.ensGene
+```
+
+This imports the data file containing chromosome 1 into dbspn137
+```{r}
+getwd()
+setwd("\\Users\\dan\\Desktop\\BCB546X-Spring2017\\bds-files\\chapter-09-working-with-range-data")
+dbsnp137  <- import("mm10_snp137_chr1_trunc.bed.gz")
+
+collapsed_exons <- reduce(exons(txdb), ignore.strand=TRUE)
+chr1_collapsed_exons <- collapsed_exons[seqnames(collapsed_exons) == "chr1"]
+```
+
+ready to pull out  variants that overlap exons on chromosome 1, but first, need to inspect if a variant has a width of 0,
+since if it does then we cannot find its overlap with exon ranges.
+if the minimum shows 0, then it needs to be resized, then can pull out those variants that overlap exons on chromosome 1 by creating a hits object
+summary(width(dbsnp137))
+
+```{r}
+dbsnp137_resized <- dbsnp137
+zw_i <- width(dbsnp137_resized) == 0
+dbsnp137_resized[zw_i] <- resize(dbsnp137_resized[zw_i], width=1)
+
+hits <- findOverlaps(dbsnp137_resized, chr1_collapsed_exons, 
+                     ignore.strand=TRUE)
+hits
+```
+
+
+Next is to determine the number of variants and the proportion of variants that are exonic, and use the countOverlaps() function to find the number of variants per exon and store it it var_counts. Results show that much more variation appear in introns.
+```{r}
+length(unique(queryHits(hits)))
+length(unique(queryHits(hits)))/length(dbsnp137_resized)
+
+var_counts <- countOverlaps(chr1_collapsed_exons, dbsnp137_resized, ignore.strand=TRUE)
+head(var_counts)
+```
+
+
+Lastly we can append this to our GRanges object that includes exons and export a bed file.
+```{r}
+chr1_collapsed_exons$num_vars <- var_counts
+
+
+export(chr1_collapsed_exons, con="chr1_collapsed_exons.bed",
+       format="bed")
+chr1_collapsed_exons
+```
+
